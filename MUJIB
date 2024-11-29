@@ -1,0 +1,101 @@
+from telegram import Update, Bot
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+import threading
+
+# Store game data
+players = {}
+game_active = False
+game_timer = None
+
+# Start command
+def start(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text("Welcome to MUJIB! Use /play to start the game.")
+
+# Play command to start the game
+def play(update: Update, context: CallbackContext) -> None:
+    global game_active, game_timer, players
+
+    if game_active:
+        update.message.reply_text("A game of MUJIB is already in progress!")
+        return
+
+    game_active = True
+    players = {}
+
+    update.message.reply_text(
+        "The MUJIB game starts now! Tap as many times as you can in 15 seconds!"
+    )
+
+    # End the game after 15 seconds
+    game_timer = threading.Timer(15, end_game, [context.bot, update.effective_chat.id])
+    game_timer.start()
+
+# Tap action
+def tap(update: Update, context: CallbackContext) -> None:
+    global players, game_active
+
+    if not game_active:
+        update.message.reply_text("No MUJIB game is active. Use /play to start a new game.")
+        return
+
+    user_id = update.message.from_user.id
+    user_name = update.message.from_user.first_name
+
+    if user_id not in players:
+        players[user_id] = {"name": user_name, "taps": 0}
+
+    players[user_id]["taps"] += 1
+    update.message.reply_text(f"{user_name} tapped in MUJIB! Total: {players[user_id]['taps']}")
+
+# End the game
+def end_game(bot: Bot, chat_id: int) -> None:
+    global players, game_active
+
+    game_active = False
+
+    if not players:
+        bot.send_message(chat_id, "No one participated in MUJIB! Game over.")
+        return
+
+    # Determine the winner
+    winner = max(players.items(), key=lambda x: x[1]["taps"])
+    winner_name = winner[1]["name"]
+    winner_taps = winner[1]["taps"]
+
+    leaderboard = "\n".join(
+        [f"{player['name']}: {player['taps']} taps" for player in players.values()]
+    )
+
+    bot.send_message(
+        chat_id,
+        f"Game over! 🏆 Winner of MUJIB: {winner_name} with {winner_taps} taps.\n\nLeaderboard:\n{leaderboard}",
+    )
+
+# Stop command
+def stop(update: Update, context: CallbackContext) -> None:
+    global game_active, game_timer
+
+    if game_timer:
+        game_timer.cancel()
+
+    game_active = False
+    update.message.reply_text("The MUJIB game has been stopped.")
+
+# Main function
+def main():
+    # Your bot token
+    bot_token = "7884546296:AAHh9E22T5ij7MgJUjewlIX6m4Zv5fScsTI"
+    updater = Updater(bot_token)
+
+    dispatcher = updater.dispatcher
+
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("play", play))
+    dispatcher.add_handler(CommandHandler("stop", stop))
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, tap))
+
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == "__main__":
+    main()
